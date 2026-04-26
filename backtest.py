@@ -19,6 +19,7 @@
 # =============================================================================
 
 import sys
+import math
 import ccxt
 import pandas as pd
 import pandas_ta as ta
@@ -128,10 +129,19 @@ def add_indicators(df: pd.DataFrame) -> pd.DataFrame:
 # 3. MOTEUR DE SIMULATION
 # =============================================================================
 
-def run_backtest(df: pd.DataFrame, initial_capital: float = INITIAL_CAPITAL) -> dict:
+def run_backtest(
+    df: pd.DataFrame,
+    initial_capital: float = INITIAL_CAPITAL,
+    rsi_overbought: float = RSI_OVERBOUGHT,
+    use_sma200_filter: bool = True,
+) -> dict:
     """
     Simule le bot trade par trade sur toutes les bougies historiques.
     SL/TP vérifiés sur le high/low de chaque bougie (simulation réaliste).
+
+    Args:
+        rsi_overbought    : seuil RSI pour bloquer l'achat (grid search)
+        use_sma200_filter : True = n'achète que si prix > SMA200
     """
     capital      = float(initial_capital)
     in_position  = False
@@ -141,6 +151,7 @@ def run_backtest(df: pd.DataFrame, initial_capital: float = INITIAL_CAPITAL) -> 
     take_profit  = 0.0
     trades       = []
     equity_curve = [capital]
+    has_sma200   = "sma200" in df.columns
 
     for i in range(1, len(df)):
         row  = df.iloc[i]
@@ -183,7 +194,14 @@ def run_backtest(df: pd.DataFrame, initial_capital: float = INITIAL_CAPITAL) -> 
         if not in_position:
             golden_cross = (prev_fast <= prev_slow) and (sma_fast > sma_slow)
 
-            if golden_cross and rsi < RSI_OVERBOUGHT:
+            # Filtre SMA200 : ignore si colonne absente ou valeur NaN
+            above_sma200 = True
+            if use_sma200_filter and has_sma200:
+                sma200_val = float(row["sma200"])
+                if not math.isnan(sma200_val):
+                    above_sma200 = price > sma200_val
+
+            if golden_cross and rsi < rsi_overbought and above_sma200:
                 risk_usdt    = capital * RISK_PER_TRADE
                 position_usd = min(risk_usdt / STOP_LOSS_PCT, capital * 0.95)
                 cost         = position_usd * (1 + FEES)
