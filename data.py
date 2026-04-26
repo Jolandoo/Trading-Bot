@@ -14,6 +14,17 @@ from config import API_KEY, API_SECRET, SYMBOL, TIMEFRAME, LIMIT
 logger = logging.getLogger(__name__)
 
 
+def create_public_exchange() -> ccxt.binance:
+    """
+    Connexion Binance PUBLIQUE sans clé API.
+    Donne accès aux prix réels du marché (OHLCV, ticker) en lecture seule.
+    Utilisée par le paper trading pour avoir de vraies données de marché.
+    """
+    exchange = ccxt.binance({"enableRateLimit": True})
+    logger.info(f"Exchange public initialisé : Binance Live | Paire : {SYMBOL}")
+    return exchange
+
+
 def create_exchange() -> ccxt.binance:
     """
     Crée et configure la connexion à Binance Testnet.
