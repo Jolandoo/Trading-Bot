@@ -124,74 +124,72 @@ def run():
 
     iteration = 0
 
-    while True:
-        iteration += 1
-        logger.info(f"--- Itération #{iteration} ---")
+    try:
+        while True:
+            iteration += 1
+            logger.info(f"--- Itération #{iteration} ---")
 
-        try:
-            # ── 1. Données ─────────────────────────────────────────────────
-            df = fetch_ohlcv(exchange)
+            try:
+                # ── 1. Données ─────────────────────────────────────────────
+                df = fetch_ohlcv(exchange)
 
-            # ── 2. Indicateurs ─────────────────────────────────────────────
-            df     = add_indicators(df)
-            values = get_latest(df)
-            price  = values["close"]
+                # ── 2. Indicateurs ─────────────────────────────────────────
+                df     = add_indicators(df)
+                values = get_latest(df)
+                price  = values["close"]
 
-            # ── 3. Vérification stop-loss / take-profit ────────────────────
-            if state.in_position:
-                current_price = get_current_price(exchange)
-                exit_reason   = check_exit_conditions(
-                    state.entry_price, current_price,
-                    state.stop_loss, state.take_profit,
-                )
-                if exit_reason:
+                # ── 3. Vérification stop-loss / take-profit ────────────────
+                if state.in_position:
+                    current_price = get_current_price(exchange)
+                    exit_reason   = check_exit_conditions(
+                        state.entry_price, current_price,
+                        state.stop_loss, state.take_profit,
+                    )
+                    if exit_reason:
+                        order = sell_market(exchange, state.btc_held)
+                        if order:
+                            state.close_position(current_price, exit_reason)
+                        continue  # Passe à la prochaine itération sans réévaluer
+
+                # ── 4. Évaluation de la stratégie ──────────────────────────
+                signal = check_signal(values, state.in_position)
+
+                # ── 5. Exécution ───────────────────────────────────────────
+                if signal == Signal.BUY:
+                    balances  = get_balance(exchange)
+                    risk_info = calculate_position(balances["USDT"], price)
+
+                    order = buy_market(exchange, risk_info["position_usdt"])
+                    if order:
+                        btc_received = risk_info["position_usdt"] / price
+                        state.open_position(
+                            entry_price = price,
+                            btc_amount  = btc_received,
+                            stop_loss   = risk_info["stop_loss"],
+                            take_profit = risk_info["take_profit"],
+                        )
+
+                elif signal == Signal.SELL and state.in_position:
                     order = sell_market(exchange, state.btc_held)
                     if order:
-                        state.close_position(current_price, exit_reason)
-                        state.print_summary()
-                    continue  # Passe à la prochaine itération sans réévaluer
+                        state.close_position(price, "STRATEGY_SIGNAL")
 
-            # ── 4. Évaluation de la stratégie ──────────────────────────────
-            signal = check_signal(values, state.in_position)
+            except RuntimeError as e:
+                logger.error(f"Erreur récupérable : {e} — nouvelle tentative dans {LOOP_INTERVAL}s")
 
-            # ── 5. Exécution ───────────────────────────────────────────────
-            if signal == Signal.BUY:
-                balances  = get_balance(exchange)
-                risk_info = calculate_position(balances["USDT"], price)
+            except Exception as e:
+                logger.exception(f"Erreur inattendue : {e}")
+                break
 
-                order = buy_market(exchange, risk_info["position_usdt"])
-                if order:
-                    # En DRY_RUN, on calcule nous-même le BTC reçu
-                    btc_received = risk_info["position_usdt"] / price
-                    state.open_position(
-                        entry_price = price,
-                        btc_amount  = btc_received,
-                        stop_loss   = risk_info["stop_loss"],
-                        take_profit = risk_info["take_profit"],
-                    )
+            # ── 6. Attente ─────────────────────────────────────────────────
+            logger.debug(f"Prochaine itération dans {LOOP_INTERVAL}s…")
+            time.sleep(LOOP_INTERVAL)
 
-            elif signal == Signal.SELL and state.in_position:
-                order = sell_market(exchange, state.btc_held)
-                if order:
-                    state.close_position(price, "STRATEGY_SIGNAL")
-                    state.print_summary()
-
-        except RuntimeError as e:
-            # Erreur réseau ou exchange → on log et on réessaie au prochain cycle
-            logger.error(f"Erreur récupérable : {e} — nouvelle tentative dans {LOOP_INTERVAL}s")
-
-        except KeyboardInterrupt:
-            logger.info("Arrêt manuel du bot (Ctrl+C)")
-            state.print_summary()
-            break
-
-        except Exception as e:
-            logger.exception(f"Erreur inattendue : {e}")
-            break
-
-        # ── 6. Attente avant la prochaine itération ────────────────────────
-        logger.debug(f"Prochaine itération dans {LOOP_INTERVAL}s…")
-        time.sleep(LOOP_INTERVAL)
+    except KeyboardInterrupt:
+        pass  # Ctrl+C intercepté ici (pendant le code ou le sleep)
+    finally:
+        logger.info("Arrêt du bot (Ctrl+C)")
+        state.print_summary()
 
 
 if __name__ == "__main__":
