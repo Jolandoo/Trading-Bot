@@ -674,6 +674,8 @@ if __name__ == "__main__":
                         help=f"Seuil RSI overbought (défaut: {RSI_OVERBOUGHT})")
     parser.add_argument("--no-sma200", action="store_true",
                         help="Désactive le filtre SMA200")
+    parser.add_argument("--months", type=int, default=MONTHS_BACK, metavar="N",
+                        help=f"Mois d'historique pour standard/walkforward (défaut: {MONTHS_BACK})")
     args = parser.parse_args()
 
     mode         = args.mode
@@ -681,22 +683,26 @@ if __name__ == "__main__":
     _sma_slow    = args.sma_slow
     _rsi         = args.rsi
     _use_sma200  = not args.no_sma200
+    _months      = args.months
 
     print(f"\n  Config : SMA {_sma_fast}/{_sma_slow}  |  RSI < {_rsi}  |  SMA200 : {'oui' if _use_sma200 else 'non'}\n")
 
     df_standard = None   # mis en cache pour éviter un double téléchargement
 
     if mode in ("standard", "all"):
-        _section("BACKTEST STANDARD — 12 mois")
-        df_standard = add_indicators(fetch_historical_data(), sma_fast=_sma_fast, sma_slow=_sma_slow)
+        _section(f"BACKTEST STANDARD — {_months} mois")
+        df_standard = add_indicators(fetch_historical_data(TIMEFRAME), sma_fast=_sma_fast, sma_slow=_sma_slow)
         results     = run_backtest(df_standard, rsi_overbought=_rsi, use_sma200_filter=_use_sma200)
         metrics_std = compute_metrics(results, df_standard)
         print_report(metrics_std)
 
     if mode in ("walkforward", "all"):
-        _section("WALK-FORWARD ANALYSIS")
+        _section(f"WALK-FORWARD ANALYSIS — {_months} mois")
         if df_standard is None:
-            df_standard = add_indicators(fetch_historical_data(), sma_fast=_sma_fast, sma_slow=_sma_slow)
+            start = (datetime.now(tz=timezone.utc) - timedelta(days=30 * _months)).strftime("%Y-%m-%d")
+            print(f"Téléchargement {SYMBOL} ({TIMEFRAME}) — {_months} mois ({start} → aujourd'hui)...")
+            df_raw      = fetch_data_between(TIMEFRAME, start_date=start)
+            df_standard = add_indicators(df_raw, sma_fast=_sma_fast, sma_slow=_sma_slow)
         folds = walk_forward_analysis(df_standard, rsi_overbought=_rsi, use_sma200_filter=_use_sma200)
         print_walk_forward_report(folds)
 
@@ -717,9 +723,10 @@ if __name__ == "__main__":
         print_comparison_table("RÉGIMES : bull 2020-21 / bear 2022 / chop 2023 / bull 2024", regime_results)
 
     if mode in ("timeframes", "all"):
-        _section("ANALYSE MULTI-TIMEFRAMES — 1h / 4h / 1d")
+        _section(f"ANALYSE MULTI-TIMEFRAMES — 1h / 4h / 1d ({_months} mois)")
         tf_results = run_timeframe_analysis(
+            months=_months,
             sma_fast=_sma_fast, sma_slow=_sma_slow,
             rsi_overbought=_rsi, use_sma200_filter=_use_sma200,
         )
-        print_comparison_table("MULTI-TIMEFRAMES (12 mois)", tf_results)
+        print_comparison_table(f"MULTI-TIMEFRAMES ({_months} mois)", tf_results)
