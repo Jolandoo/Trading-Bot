@@ -96,23 +96,45 @@ LOG_LEVEL      = "INFO"
 ## Lancement
 
 ```bash
-# Mode simulation (recommandé pour débuter)
+# Paper trading — prix réels Binance, zéro ordre réel (recommandé)
+python paper_trading.py
+
+# Backtesting sur données historiques
+python backtest.py           # 12 mois (défaut)
+python backtest.py all       # toutes les analyses
+
+# Bot live sur Testnet (prix fictifs)
 python main.py
-
-# Backtesting sur 12 mois de données historiques
-python backtest.py
 ```
 
-### Exemple de sortie terminal
+### Paper trading — dashboard terminal
 
 ```
-14:32:01 | INFO  | main      | BOT DE TRADING DÉMARRÉ [DRY RUN]
-14:32:02 | INFO  | data      | Soldes — USDT : 10 000.00 | BTC : 0.000000
-14:32:03 | INFO  | strategy  | SIGNAL BUY — Golden Cross détecté | RSI=52.3
-14:32:03 | INFO  | risk      | Position calculée — 3 333 USDT | SL : 77 000 | TP : 84 800
-14:32:03 | INFO  | main      | [DRY RUN] Position OUVERTE — Entrée : 79 381.00
-14:36:04 | INFO  | risk      | TAKE-PROFIT atteint | PnL : +199.99 USDT
+══════════════════════════════════════════════════════
+  PAPER TRADING  ·  BTC/USDT (4h)  ·  Binance Live
+  #42  ·  19:42:08  ·  Session : 0h42m
+══════════════════════════════════════════════════════
+  MARCHÉ
+    Prix actuel   :      67 420,00 USDT
+    RSI (4h)      :          52.3
+    SMA(9/21)     :      67 100  /  66 800   ↑ Bullish
+──────────────────────────────────────────────────────
+  POSITION : ● OUVERTE
+    Entrée        :      65 000,00 USDT
+    PnL latent    :       +3,72 %  (+37,20 USDT)
+    Stop-Loss     :      63 050,00   TP : 68 900,00
+──────────────────────────────────────────────────────
+  SESSION
+    Trades        :  3  (✓ 2 / ✗ 1)
+    Win rate      :  66%
+    PnL réalisé   :  +87,40 USDT
+    Capital       :  10 087,40 USDT
+    CSV           :  logs/paper_20260426_194208.csv
+══════════════════════════════════════════════════════
+  Prochaine vérif dans 60s  ·  Ctrl+C pour quitter
 ```
+
+À l'arrêt (`Ctrl+C`), un rapport complet de session s'affiche et le CSV reste accessible dans `logs/`.
 
 ---
 
@@ -120,17 +142,18 @@ python backtest.py
 
 ```
 Trading-Bot/
-├── main.py          # Orchestrateur — boucle principale + gestion d'état
-├── data.py          # Connexion à Binance et récupération des bougies OHLCV
-├── indicators.py    # Calcul du RSI et des SMA via pandas-ta
-├── strategy.py      # Détection des signaux Golden/Death Cross
-├── risk.py          # Calcul de position et vérification SL/TP
-├── executor.py      # Envoi (ou simulation) des ordres marché
-├── backtest.py      # Moteur de backtesting + Walk-Forward Analysis
-├── metrics.py       # Sharpe, Sortino, Calmar, Profit Factor, Espérance
-├── tests/           # Suite de tests unitaires (pytest, 57 tests)
-├── logs/            # Logs rotatifs du bot (bot.log, généré automatiquement)
-├── config.py        # Paramètres du bot (ignoré par git)
+├── main.py           # Orchestrateur — boucle live sur Binance Testnet
+├── paper_trading.py  # Paper trading — prix réels Binance, sans ordres réels
+├── backtest.py       # Moteur de backtesting + Walk-Forward Analysis
+├── data.py           # Connexion à Binance (Testnet ou public)
+├── indicators.py     # Calcul du RSI et des SMA via pandas-ta
+├── strategy.py       # Détection des signaux Golden/Death Cross
+├── risk.py           # Calcul de position et vérification SL/TP
+├── executor.py       # Envoi (ou simulation) des ordres marché
+├── metrics.py        # Sharpe, Sortino, Calmar, Profit Factor, Espérance
+├── tests/            # Suite de tests unitaires (pytest, 74 tests)
+├── logs/             # Logs rotatifs + CSV des trades paper trading
+├── config.py         # Paramètres du bot (ignoré par git)
 ├── config.example.py
 └── requirements.txt
 ```
