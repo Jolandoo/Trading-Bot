@@ -156,26 +156,40 @@ Initialisation
 ## Backtesting
 
 ```bash
-python backtest.py
+python backtest.py [mode]
 ```
 
-Le moteur télécharge 12 mois de données historiques depuis Binance et simule chaque trade en appliquant la stratégie et le risk management. En sortie :
+| Mode | Description |
+|------|-------------|
+| *(aucun)* ou `standard` | Backtest 12 mois (défaut) |
+| `walkforward` | Walk-Forward Analysis (3 fenêtres indépendantes) |
+| `periods` | Compare 1 an / 3 ans / 5 ans d'historique |
+| `regimes` | Compare bull 2020-21 / bear 2022 / chop 2023 / bull 2024 |
+| `timeframes` | Compare 1h / 4h / 1d sur la même période |
+| `all` | Lance toutes les analyses ci-dessus |
 
 **Métriques de base**
-- PnL total (USDT et %)
-- Taux de réussite (Win Rate), ratio gain/perte, espérance par trade
+- PnL total (USDT et %), ratio gain/perte, espérance par trade
 - Drawdown maximum, pertes consécutives maximales
-- Comparaison vs Buy & Hold
-- Détail des 20 derniers trades
+- Comparaison vs Buy & Hold, détail des 20 derniers trades
 
-**Métriques avancées**
-- **Sharpe ratio** — rendement ajusté à la volatilité totale (annualisé)
-- **Sortino ratio** — comme Sharpe mais ne pénalise que la volatilité baissière
+**Métriques avancées** (annualisées selon le timeframe)
+- **Sharpe ratio** — rendement ajusté à la volatilité totale
+- **Sortino ratio** — ne pénalise que la volatilité baissière
 - **Calmar ratio** — TCAM / drawdown maximum (> 1 = excellent)
-- **Profit Factor** — somme des gains / somme des pertes (> 1.5 = bon, > 2 = excellent)
+- **Profit Factor** — somme des gains / somme des pertes (> 1.5 = bon)
 
 **Walk-Forward Analysis**
-Découpe automatique en 3 fenêtres temporelles indépendantes pour évaluer si la stratégie est robuste dans le temps ou dépendante d'une seule période favorable.
+Découpe en 3 fenêtres temporelles indépendantes — révèle si la stratégie
+est robuste dans le temps ou dépendante d'une seule période favorable.
+
+**Analyse par régimes de marché**
+Teste séparément les phases bull (2020-21, 2024), bear (2022) et chop (2023)
+pour identifier dans quel contexte la stratégie performe ou échoue.
+
+**Analyse multi-timeframes**
+Compare 1h / 4h / 1d avec des métriques Sharpe/Sortino correctement
+annualisées par timeframe — pour trouver le réglage optimal.
 
 ### Résultats — BTC/USDT 4h (mai 2025 → avril 2026)
 
@@ -242,8 +256,9 @@ python -m pytest tests/ -v
 |---|---|---|
 | Signaux de trading | `tests/test_strategy.py` | Golden/Death Cross, RSI, HOLD |
 | Gestion du risque | `tests/test_risk.py` | Position size, SL/TP math |
+| Indicateurs techniques | `tests/test_indicators.py` | RSI bornes, SMA réactivité, immutabilité |
 | Métriques | `tests/test_metrics.py` | Sharpe, Sortino, Calmar, PF, Espérance |
-| Moteur backtest | `tests/test_backtest.py` | Structure, trades, métriques |
+| Moteur backtest | `tests/test_backtest.py` | Structure, trades SL/TP, métriques |
 
 Les tests s'exécutent sans clé API (mock automatique de `config.py` via `conftest.py`).
 
