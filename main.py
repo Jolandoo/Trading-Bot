@@ -13,17 +13,32 @@
 #   6. Attendre avant la prochaine itération
 # =============================================================================
 
+import os
 import time
 import logging
 from datetime import datetime
+from logging.handlers import RotatingFileHandler
 from config import LOOP_INTERVAL, DRY_RUN, LOG_LEVEL
 
-# --- Configuration du logger (affichage propre dans le terminal) ---
+# --- Configuration du logger ---
+_LOG_FORMAT = "%(asctime)s | %(levelname)-8s | %(name)-12s | %(message)s"
+_DATE_FMT   = "%H:%M:%S"
+_DATE_FMT_FILE = "%Y-%m-%d %H:%M:%S"
+
 logging.basicConfig(
     level   = getattr(logging, LOG_LEVEL),
-    format  = "%(asctime)s | %(levelname)-8s | %(name)-12s | %(message)s",
-    datefmt = "%H:%M:%S",
+    format  = _LOG_FORMAT,
+    datefmt = _DATE_FMT,
 )
+
+# Rotation automatique : 5 Mo par fichier, 5 fichiers conservés
+os.makedirs("logs", exist_ok=True)
+_file_handler = RotatingFileHandler(
+    "logs/bot.log", maxBytes=5 * 1024 * 1024, backupCount=5, encoding="utf-8"
+)
+_file_handler.setFormatter(logging.Formatter(_LOG_FORMAT, datefmt=_DATE_FMT_FILE))
+logging.getLogger().addHandler(_file_handler)
+
 logger = logging.getLogger("main")
 
 # --- Import des modules du bot ---
