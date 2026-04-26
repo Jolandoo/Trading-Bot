@@ -20,10 +20,11 @@
 
 import sys
 import math
+import argparse
 import ccxt
 import pandas as pd
 import pandas_ta as ta
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from config import (
     SYMBOL, TIMEFRAME,
     RSI_PERIOD, SMA_FAST, SMA_SLOW, RSI_OVERBOUGHT,
@@ -62,11 +63,11 @@ TIMEFRAMES_CONFIG: list[str] = ["1h", "4h", "1d"]
 # 1. RÉCUPÉRATION DES DONNÉES HISTORIQUES
 # =============================================================================
 
-def fetch_historical_data() -> pd.DataFrame:
+def fetch_historical_data(timeframe: str = TIMEFRAME) -> pd.DataFrame:
     """Télécharge MONTHS_BACK mois depuis aujourd'hui (usage standard)."""
-    start = (datetime.utcnow() - timedelta(days=30 * MONTHS_BACK)).strftime("%Y-%m-%d")
-    print(f"Téléchargement {SYMBOL} ({TIMEFRAME}) — {MONTHS_BACK} mois ({start} → aujourd'hui)...")
-    return fetch_data_between(TIMEFRAME, start_date=start)
+    start = (datetime.now(tz=timezone.utc) - timedelta(days=30 * MONTHS_BACK)).strftime("%Y-%m-%d")
+    print(f"Téléchargement {SYMBOL} ({timeframe}) — {MONTHS_BACK} mois ({start} → aujourd'hui)...")
+    return fetch_data_between(timeframe, start_date=start)
 
 
 def fetch_data_between(
@@ -115,11 +116,15 @@ def fetch_data_between(
 # 2. CALCUL DES INDICATEURS
 # =============================================================================
 
-def add_indicators(df: pd.DataFrame) -> pd.DataFrame:
+def add_indicators(
+    df: pd.DataFrame,
+    sma_fast: int = SMA_FAST,
+    sma_slow: int = SMA_SLOW,
+) -> pd.DataFrame:
     df = df.copy()
     df["rsi"]      = ta.rsi(df["close"], length=RSI_PERIOD)
-    df["sma_fast"] = ta.sma(df["close"], length=SMA_FAST)
-    df["sma_slow"] = ta.sma(df["close"], length=SMA_SLOW)
+    df["sma_fast"] = ta.sma(df["close"], length=sma_fast)
+    df["sma_slow"] = ta.sma(df["close"], length=sma_slow)
     df["sma200"]   = ta.sma(df["close"], length=200)
     df.dropna(inplace=True)
     return df
@@ -313,7 +318,12 @@ def compute_metrics(
 # 5. WALK-FORWARD ANALYSIS
 # =============================================================================
 
-def walk_forward_analysis(df: pd.DataFrame, n_splits: int = WF_SPLITS) -> list[dict]:
+def walk_forward_analysis(
+    df: pd.DataFrame,
+    n_splits: int = WF_SPLITS,
+    rsi_overbought: float = RSI_OVERBOUGHT,
+    use_sma200_filter: bool = True,
+) -> list[dict]:
     """
     Découpe les données en n_splits fenêtres temporelles indépendantes et
     évalue la stratégie sur chacune. Révèle si les performances sont stables
@@ -332,7 +342,10 @@ def walk_forward_analysis(df: pd.DataFrame, n_splits: int = WF_SPLITS) -> list[d
             print(f"  Fenêtre {i+1} ignorée : seulement {len(fold)} bougies (minimum {min_candles})")
             continue
 
-        fold_results = run_backtest(fold, initial_capital=INITIAL_CAPITAL)
+        fold_results = run_backtest(
+            fold, initial_capital=INITIAL_CAPITAL,
+            rsi_overbought=rsi_overbought, use_sma200_filter=use_sma200_filter,
+        )
         fold_metrics = compute_metrics(fold_results, fold)
 
         if fold_metrics:
@@ -348,21 +361,29 @@ def walk_forward_analysis(df: pd.DataFrame, n_splits: int = WF_SPLITS) -> list[d
 # 6. HELPER : lancer un backtest complet sur un DataFrame quelconque
 # =============================================================================
 
-def _backtest_df(label: str, df_raw: pd.DataFrame, timeframe: str = TIMEFRAME) -> dict | None:
+def _backtest_df(
+    label: str,
+    df_raw: pd.DataFrame,
+    timeframe: str = TIMEFRAME,
+    sma_fast: int = SMA_FAST,
+    sma_slow: int = SMA_SLOW,
+    rsi_overbought: float = RSI_OVERBOUGHT,
+    use_sma200_filter: bool = True,
+) -> dict | None:
     """
     Ajoute les indicateurs, lance le backtest et retourne les métriques.
     Retourne None si les données sont insuffisantes.
     """
-    MIN_CANDLES = max(SMA_SLOW * 2 + RSI_PERIOD, 50)
+    MIN_CANDLES = max(sma_slow * 2 + RSI_PERIOD, 50)
     if len(df_raw) < MIN_CANDLES:
         print(f"  {label}: données insuffisantes ({len(df_raw)} bougies, minimum {MIN_CANDLES})")
         return None
 
-    df_ind = add_indicators(df_raw)
+    df_ind = add_indicators(df_raw, sma_fast=sma_fast, sma_slow=sma_slow)
     if len(df_ind) < 10:
         return None
 
-    result  = run_backtest(df_ind)
+    result  = run_backtest(df_ind, rsi_overbought=rsi_overbought, use_sma200_filter=use_sma200_filter)
     metrics = compute_metrics(result, df_ind, timeframe=timeframe)
     if metrics:
         metrics["label"]     = label
@@ -374,7 +395,12 @@ def _backtest_df(label: str, df_raw: pd.DataFrame, timeframe: str = TIMEFRAME) -
 # 7. ANALYSE MULTI-PÉRIODES — 1 an, 3 ans, 5 ans
 # =============================================================================
 
-def run_period_analysis() -> list[dict]:
+def run_period_analysis(
+    sma_fast: int = SMA_FAST,
+    sma_slow: int = SMA_SLOW,
+    rsi_overbought: float = RSI_OVERBOUGHT,
+    use_sma200_filter: bool = True,
+) -> list[dict]:
     """
     Teste la stratégie sur 1 an, 3 ans et 5 ans d'historique.
     Indique si les performances se maintiennent sur longue durée ou sont
@@ -382,10 +408,11 @@ def run_period_analysis() -> list[dict]:
     """
     results = []
     for label, months in PERIODS_CONFIG.items():
-        start = (datetime.utcnow() - timedelta(days=30 * months)).strftime("%Y-%m-%d")
+        start = (datetime.now(tz=timezone.utc) - timedelta(days=30 * months)).strftime("%Y-%m-%d")
         print(f"  [{label}] {start} → aujourd'hui ({TIMEFRAME})")
         df_raw = fetch_data_between(TIMEFRAME, start_date=start)
-        m = _backtest_df(label, df_raw)
+        m = _backtest_df(label, df_raw, sma_fast=sma_fast, sma_slow=sma_slow,
+                         rsi_overbought=rsi_overbought, use_sma200_filter=use_sma200_filter)
         if m:
             results.append(m)
     return results
@@ -395,7 +422,12 @@ def run_period_analysis() -> list[dict]:
 # 8. ANALYSE PAR RÉGIME DE MARCHÉ — bull, bear, chop
 # =============================================================================
 
-def run_regime_analysis() -> list[dict]:
+def run_regime_analysis(
+    sma_fast: int = SMA_FAST,
+    sma_slow: int = SMA_SLOW,
+    rsi_overbought: float = RSI_OVERBOUGHT,
+    use_sma200_filter: bool = True,
+) -> list[dict]:
     """
     Teste la stratégie sur des régimes de marché distincts.
     Crucial pour identifier dans quel contexte la stratégie est rentable
@@ -405,7 +437,8 @@ def run_regime_analysis() -> list[dict]:
     for label, (start, end) in REGIME_CONFIG.items():
         print(f"  [{label}] {start} → {end} ({TIMEFRAME})")
         df_raw = fetch_data_between(TIMEFRAME, start_date=start, end_date=end)
-        m = _backtest_df(label, df_raw)
+        m = _backtest_df(label, df_raw, sma_fast=sma_fast, sma_slow=sma_slow,
+                         rsi_overbought=rsi_overbought, use_sma200_filter=use_sma200_filter)
         if m:
             results.append(m)
     return results
@@ -415,19 +448,26 @@ def run_regime_analysis() -> list[dict]:
 # 9. ANALYSE MULTI-TIMEFRAMES — 1h, 4h, 1d
 # =============================================================================
 
-def run_timeframe_analysis(months: int = MONTHS_BACK) -> list[dict]:
+def run_timeframe_analysis(
+    months: int = MONTHS_BACK,
+    sma_fast: int = SMA_FAST,
+    sma_slow: int = SMA_SLOW,
+    rsi_overbought: float = RSI_OVERBOUGHT,
+    use_sma200_filter: bool = True,
+) -> list[dict]:
     """
     Teste la stratégie sur 1h, 4h et 1d sur la même période.
     Révèle le timeframe optimal : 1h génère plus de signaux mais plus de bruit,
     1d est plus robuste mais réagit lentement.
     Les métriques Sharpe/Sortino sont correctement annualisées par timeframe.
     """
-    start = (datetime.utcnow() - timedelta(days=30 * months)).strftime("%Y-%m-%d")
+    start = (datetime.now(tz=timezone.utc) - timedelta(days=30 * months)).strftime("%Y-%m-%d")
     results = []
     for tf in TIMEFRAMES_CONFIG:
         print(f"  [Timeframe {tf}] {start} → aujourd'hui")
         df_raw = fetch_data_between(tf, start_date=start)
-        m = _backtest_df(tf, df_raw, timeframe=tf)
+        m = _backtest_df(tf, df_raw, timeframe=tf, sma_fast=sma_fast, sma_slow=sma_slow,
+                         rsi_overbought=rsi_overbought, use_sma200_filter=use_sma200_filter)
         if m:
             results.append(m)
     return results
@@ -611,47 +651,75 @@ def _section(title: str):
 
 
 if __name__ == "__main__":
-    mode = sys.argv[1] if len(sys.argv) > 1 else "standard"
-    valid_modes = {"standard", "walkforward", "periods", "regimes", "timeframes", "all"}
+    parser = argparse.ArgumentParser(
+        description="Backtest BTC/USDT — stratégie Golden Cross / RSI",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=(
+            "Exemples :\n"
+            "  python backtest.py periods\n"
+            "  python backtest.py periods --sma-fast 12 --sma-slow 50 --rsi 55 --no-sma200\n"
+            "  python backtest.py all --sma-fast 12 --sma-slow 50\n"
+        ),
+    )
+    parser.add_argument(
+        "mode", nargs="?", default="standard",
+        choices=["standard", "walkforward", "periods", "regimes", "timeframes", "all"],
+        help="Mode d'analyse (défaut: standard)",
+    )
+    parser.add_argument("--sma-fast", type=int, default=SMA_FAST, metavar="N",
+                        help=f"Période SMA rapide (défaut: {SMA_FAST})")
+    parser.add_argument("--sma-slow", type=int, default=SMA_SLOW, metavar="N",
+                        help=f"Période SMA lente (défaut: {SMA_SLOW})")
+    parser.add_argument("--rsi", type=int, default=RSI_OVERBOUGHT, metavar="N",
+                        help=f"Seuil RSI overbought (défaut: {RSI_OVERBOUGHT})")
+    parser.add_argument("--no-sma200", action="store_true",
+                        help="Désactive le filtre SMA200")
+    args = parser.parse_args()
 
-    if mode not in valid_modes:
-        print(f"Usage : python backtest.py [{' | '.join(sorted(valid_modes))}]")
-        print("  standard    — backtest 12 mois (défaut)")
-        print("  walkforward — walk-forward analysis")
-        print("  periods     — compare 1an / 3ans / 5ans")
-        print("  regimes     — compare bull / bear / chop / bull2024")
-        print("  timeframes  — compare 1h / 4h / 1d")
-        print("  all         — tout lancer")
-        sys.exit(1)
+    mode         = args.mode
+    _sma_fast    = args.sma_fast
+    _sma_slow    = args.sma_slow
+    _rsi         = args.rsi
+    _use_sma200  = not args.no_sma200
+
+    print(f"\n  Config : SMA {_sma_fast}/{_sma_slow}  |  RSI < {_rsi}  |  SMA200 : {'oui' if _use_sma200 else 'non'}\n")
 
     df_standard = None   # mis en cache pour éviter un double téléchargement
 
     if mode in ("standard", "all"):
         _section("BACKTEST STANDARD — 12 mois")
-        df_standard = fetch_historical_data()
-        df_standard = add_indicators(df_standard)
-        results     = run_backtest(df_standard)
+        df_standard = add_indicators(fetch_historical_data(), sma_fast=_sma_fast, sma_slow=_sma_slow)
+        results     = run_backtest(df_standard, rsi_overbought=_rsi, use_sma200_filter=_use_sma200)
         metrics_std = compute_metrics(results, df_standard)
         print_report(metrics_std)
 
     if mode in ("walkforward", "all"):
         _section("WALK-FORWARD ANALYSIS")
         if df_standard is None:
-            df_standard = add_indicators(fetch_historical_data())
-        folds = walk_forward_analysis(df_standard)
+            df_standard = add_indicators(fetch_historical_data(), sma_fast=_sma_fast, sma_slow=_sma_slow)
+        folds = walk_forward_analysis(df_standard, rsi_overbought=_rsi, use_sma200_filter=_use_sma200)
         print_walk_forward_report(folds)
 
     if mode in ("periods", "all"):
         _section("ANALYSE MULTI-PÉRIODES — 1an / 3ans / 5ans")
-        period_results = run_period_analysis()
+        period_results = run_period_analysis(
+            sma_fast=_sma_fast, sma_slow=_sma_slow,
+            rsi_overbought=_rsi, use_sma200_filter=_use_sma200,
+        )
         print_comparison_table("MULTI-PÉRIODES : 1an / 3ans / 5ans", period_results)
 
     if mode in ("regimes", "all"):
         _section("ANALYSE PAR RÉGIME DE MARCHÉ")
-        regime_results = run_regime_analysis()
+        regime_results = run_regime_analysis(
+            sma_fast=_sma_fast, sma_slow=_sma_slow,
+            rsi_overbought=_rsi, use_sma200_filter=_use_sma200,
+        )
         print_comparison_table("RÉGIMES : bull 2020-21 / bear 2022 / chop 2023 / bull 2024", regime_results)
 
     if mode in ("timeframes", "all"):
         _section("ANALYSE MULTI-TIMEFRAMES — 1h / 4h / 1d")
-        tf_results = run_timeframe_analysis()
+        tf_results = run_timeframe_analysis(
+            sma_fast=_sma_fast, sma_slow=_sma_slow,
+            rsi_overbought=_rsi, use_sma200_filter=_use_sma200,
+        )
         print_comparison_table("MULTI-TIMEFRAMES (12 mois)", tf_results)
