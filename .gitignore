@@ -16,3 +16,6 @@ logs/
 
 # pytest
 .pytest_cache/
+
+# Artefacts générés (backtest optimizer)
+optimize_results.csv
