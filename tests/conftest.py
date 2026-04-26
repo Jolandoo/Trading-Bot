@@ -23,6 +23,7 @@ _cfg.RSI_OVERBOUGHT   = 70
 _cfg.RISK_PER_TRADE   = 0.01
 _cfg.STOP_LOSS_PCT    = 0.03
 _cfg.TAKE_PROFIT_PCT  = 0.06
+_cfg.USE_SMA200_FILTER = True
 _cfg.DRY_RUN          = True
 _cfg.LOOP_INTERVAL    = 60
 _cfg.LOG_LEVEL        = "WARNING"   # Silence les logs pendant les tests

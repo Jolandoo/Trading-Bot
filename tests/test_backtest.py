@@ -51,7 +51,7 @@ def _make_golden_cross_df(cross_at: int = 50, n: int = 200) -> pd.DataFrame:
         "rsi"      : 50.0,
         "sma_fast" : sma_fast.astype(float),
         "sma_slow" : sma_slow.astype(float),
-        "sma200"   : sma_slow.astype(float),
+        "sma200"   : (sma_slow * 0.9).astype(float),  # sous le prix → filtre SMA200 passe
     }, index=idx)
     return df
 
@@ -181,7 +181,7 @@ def test_stop_loss_trade_has_negative_pnl():
         "rsi"      : 50.0,
         "sma_fast" : sma_fast,
         "sma_slow" : sma_slow,
-        "sma200"   : sma_slow,
+        "sma200"   : sma_slow * 0.9,  # sous le prix → filtre SMA200 passe
     }, index=idx)
 
     result = run_backtest(df)

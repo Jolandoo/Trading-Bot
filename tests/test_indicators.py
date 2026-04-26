@@ -63,9 +63,10 @@ def test_rsi_bounded_between_0_and_100():
 
 
 def test_no_nan_after_add_indicators():
-    """dropna() doit éliminer toutes les valeurs manquantes des indicateurs."""
+    """Les colonnes de trading critiques ne doivent pas avoir de NaN après dropna."""
     df = add_indicators(_make_ohlcv(100))
-    assert df.isna().sum().sum() == 0
+    for col in ("rsi", "sma_fast", "sma_slow"):
+        assert df[col].isna().sum() == 0, f"NaN trouvés dans {col}"
 
 
 def test_add_indicators_drops_initial_rows():
@@ -151,6 +152,27 @@ def test_get_latest_rsi_bounded():
     df = add_indicators(_make_ohlcv(100))
     values = get_latest(df)
     assert 0 <= values["rsi"] <= 100
+
+
+# ── SMA200 ───────────────────────────────────────────────────────────────────
+
+def test_add_indicators_creates_sma200_column():
+    df = add_indicators(_make_ohlcv(250))
+    assert "sma200" in df.columns
+
+
+def test_sma200_has_valid_values_with_enough_data():
+    """Avec 250 bougies, la SMA200 doit être calculée (pas de NaN à la fin)."""
+    import pandas as pd
+    df = add_indicators(_make_ohlcv(250))
+    assert pd.notna(df["sma200"].iloc[-1]), "Dernière valeur SMA200 est NaN"
+
+
+def test_sma200_present_but_nan_with_few_candles():
+    """Avec 50 bougies, la colonne sma200 existe mais ses valeurs sont NaN."""
+    df = add_indicators(_make_ohlcv(50))
+    assert "sma200" in df.columns
+    assert df["sma200"].isna().all(), "SMA200 devrait être NaN avec seulement 50 bougies"
 
 
 # ── Minimum de données ────────────────────────────────────────────────────────

@@ -15,6 +15,7 @@ def _values(
     prev_fast: float = 90.0,
     prev_slow: float = 95.0,
     close: float = 50_000.0,
+    sma200: float = 40_000.0,   # en dessous du prix → filtre SMA200 passe
 ) -> dict:
     return {
         "close"         : close,
@@ -23,6 +24,7 @@ def _values(
         "sma_slow"      : sma_slow,
         "prev_sma_fast" : prev_fast,
         "prev_sma_slow" : prev_slow,
+        "sma200"        : sma200,
     }
 
 
@@ -84,6 +86,44 @@ def test_hold_in_position_no_exit_condition():
     """En position, RSI neutre, pas de death cross → HOLD."""
     v = _values(rsi=55.0, sma_fast=105.0, sma_slow=100.0, prev_fast=104.0, prev_slow=100.0)
     assert check_signal(v, in_position=True) == Signal.HOLD
+
+
+# ── Filtre SMA200 ─────────────────────────────────────────────────────────────
+
+def test_golden_cross_blocked_when_price_below_sma200():
+    """Golden Cross valide mais prix sous SMA200 → HOLD (marché baissier long terme)."""
+    v = _values(
+        rsi=50.0,
+        sma_fast=101.0, sma_slow=100.0,
+        prev_fast=99.0, prev_slow=100.0,
+        close=50_000.0,
+        sma200=60_000.0,   # prix < sma200 → filtre bloque l'achat
+    )
+    assert check_signal(v, in_position=False) == Signal.HOLD
+
+
+def test_golden_cross_passes_when_price_above_sma200():
+    """Golden Cross valide avec prix au-dessus de SMA200 → BUY."""
+    v = _values(
+        rsi=50.0,
+        sma_fast=101.0, sma_slow=100.0,
+        prev_fast=99.0, prev_slow=100.0,
+        close=50_000.0,
+        sma200=40_000.0,   # prix > sma200 → filtre passe
+    )
+    assert check_signal(v, in_position=False) == Signal.BUY
+
+
+def test_golden_cross_passes_when_sma200_nan():
+    """Si sma200 est NaN (données insuffisantes), le filtre est ignoré → BUY."""
+    import math
+    v = _values(
+        rsi=50.0,
+        sma_fast=101.0, sma_slow=100.0,
+        prev_fast=99.0, prev_slow=100.0,
+        sma200=float("nan"),
+    )
+    assert check_signal(v, in_position=False) == Signal.BUY
 
 
 # ── Signal enum ───────────────────────────────────────────────────────────────
