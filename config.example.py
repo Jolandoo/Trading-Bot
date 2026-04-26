@@ -13,14 +13,15 @@ API_SECRET = "REMPLACE_PAR_TON_SECRET_TESTNET"
 # --- Marché ---
 SYMBOL     = "BTC/USDT"   # Paire tradée
 TIMEFRAME  = "1h"          # Intervalle des bougies : 1m, 5m, 15m, 1h, 4h, 1d
-LIMIT      = 100           # Nombre de bougies à récupérer pour les calculs
+LIMIT      = 250           # Nombre de bougies à récupérer (250 minimum pour SMA200)
 
 # --- Indicateurs ---
 RSI_PERIOD    = 14    # Période standard du RSI
 SMA_FAST      = 9     # Moyenne mobile rapide
 SMA_SLOW      = 21    # Moyenne mobile lente
-RSI_OVERSOLD  = 30    # En dessous → marché survendu (signal achat possible)
-RSI_OVERBOUGHT= 70    # Au dessus  → marché suracheté (signal vente possible)
+RSI_OVERSOLD       = 30    # En dessous → marché survendu (signal achat possible)
+RSI_OVERBOUGHT     = 70    # Au dessus  → marché suracheté (signal vente possible)
+USE_SMA200_FILTER  = True  # True = n'achète que si le prix est au-dessus de la SMA200
 
 # --- Gestion du risque ---
 RISK_PER_TRADE = 0.01   # 1% du capital risqué par trade (règle d'or)

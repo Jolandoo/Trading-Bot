@@ -11,9 +11,10 @@
 #   - Après  : sma_fast > sma_slow  (bullish) → c'est le golden cross !
 # =============================================================================
 
+import math
 import logging
 from enum import Enum
-from config import RSI_OVERSOLD, RSI_OVERBOUGHT
+from config import RSI_OVERSOLD, RSI_OVERBOUGHT, USE_SMA200_FILTER
 
 logger = logging.getLogger(__name__)
 
@@ -56,10 +57,20 @@ def check_signal(values: dict, in_position: bool) -> Signal:
     # Logique d'ACHAT — seulement si on n'est PAS en position
     # -------------------------------------------------------
     if not in_position:
-        if golden_cross and rsi < RSI_OVERBOUGHT:
+        # Filtre SMA200 : n'achète que si le prix est au-dessus de la tendance longue
+        # Dégradation gracieuse : si sma200 est NaN (LIMIT < 200), le filtre est ignoré
+        sma200 = values.get("sma200", float("nan"))
+        above_sma200 = (
+            not USE_SMA200_FILTER
+            or math.isnan(sma200)
+            or values["close"] > sma200
+        )
+
+        if golden_cross and rsi < RSI_OVERBOUGHT and above_sma200:
             logger.info(
                 f"SIGNAL BUY — Golden Cross détecté | "
-                f"RSI={rsi:.1f} | SMA{9}={sma_fast:.2f} > SMA{21}={sma_slow:.2f}"
+                f"RSI={rsi:.1f} | SMA{9}={sma_fast:.2f} > SMA{21}={sma_slow:.2f} | "
+                f"Prix {'>' if above_sma200 else '<'} SMA200"
             )
             return Signal.BUY
 
