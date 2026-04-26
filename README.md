@@ -10,8 +10,12 @@ Le bot repose sur le croisement de deux moyennes mobiles simples (SMA), confirm�
 
 | Signal | Condition |
 |--------|-----------|
-| **BUY** | SMA(9) croise SMA(21) à la hausse **ET** RSI < 55 |
+| **BUY** | SMA(9) croise SMA(21) à la hausse **ET** RSI < 55 **ET** prix > SMA(200) |
 | **SELL** | SMA(9) croise SMA(21) à la baisse **OU** RSI > 55 |
+
+> **Filtre SMA200** : le bot n'achète que si le prix est au-dessus de la moyenne mobile 200 périodes.
+> Cela bloque les entrées en marché baissier long terme (bear market).
+> Désactivable avec `USE_SMA200_FILTER = False` dans `config.py`.
 
 ### Gestion du risque
 
@@ -69,14 +73,15 @@ API_SECRET = "..."          # Secret Testnet
 # Marché
 SYMBOL     = "BTC/USDT"
 TIMEFRAME  = "4h"           # Intervalle des bougies
-LIMIT      = 100            # Nombre de bougies chargées
+LIMIT      = 250            # Nombre de bougies (250 min pour SMA200)
 
 # Indicateurs
 RSI_PERIOD   = 14
 SMA_FAST     = 9
 SMA_SLOW     = 21
-RSI_OVERSOLD    = 30
-RSI_OVERBOUGHT  = 55
+RSI_OVERSOLD     = 30
+RSI_OVERBOUGHT   = 55
+USE_SMA200_FILTER= True     # Filtre tendance longue (désactiver = plus de signaux)
 
 # Risque
 RISK_PER_TRADE   = 0.01    # 1 % du capital par trade
@@ -102,6 +107,11 @@ python paper_trading.py
 # Backtesting sur données historiques
 python backtest.py           # 12 mois (défaut)
 python backtest.py all       # toutes les analyses
+
+# Optimisation des paramètres (grid search)
+python optimize.py           # 12 mois, 4h (défaut)
+python optimize.py 24        # 24 mois de données
+python optimize.py 12 1h     # 12 mois, timeframe 1h
 
 # Bot live sur Testnet (prix fictifs)
 python main.py
@@ -145,13 +155,14 @@ Trading-Bot/
 ├── main.py           # Orchestrateur — boucle live sur Binance Testnet
 ├── paper_trading.py  # Paper trading — prix réels Binance, sans ordres réels
 ├── backtest.py       # Moteur de backtesting + Walk-Forward Analysis
+├── optimize.py       # Grid search — trouve les meilleurs paramètres (Sharpe)
 ├── data.py           # Connexion à Binance (Testnet ou public)
-├── indicators.py     # Calcul du RSI et des SMA via pandas-ta
-├── strategy.py       # Détection des signaux Golden/Death Cross
+├── indicators.py     # Calcul RSI, SMA, SMA200 via pandas-ta
+├── strategy.py       # Signaux Golden/Death Cross + filtre SMA200
 ├── risk.py           # Calcul de position et vérification SL/TP
 ├── executor.py       # Envoi (ou simulation) des ordres marché
 ├── metrics.py        # Sharpe, Sortino, Calmar, Profit Factor, Espérance
-├── tests/            # Suite de tests unitaires (pytest, 74 tests)
+├── tests/            # Suite de tests unitaires (pytest, 80 tests)
 ├── logs/             # Logs rotatifs + CSV des trades paper trading
 ├── config.py         # Paramètres du bot (ignoré par git)
 ├── config.example.py
@@ -273,7 +284,7 @@ Le ratio gain/perte de 1,79 valide la logique SL/TP asymétrique (3 % / 6 %).
 python -m pytest tests/ -v
 ```
 
-57 tests unitaires couvrant l'ensemble des modules critiques :
+80 tests unitaires couvrant l'ensemble des modules critiques :
 
 | Module testé | Fichier | Tests |
 |---|---|---|
