@@ -2,3 +2,17 @@ config.py
 .venv/
 __pycache__/
 *.pyc
+*.pyo
+
+# Logs rotatifs générés par le bot
+logs/
+
+# IDE
+.idea/
+.vscode/
+
+# Claude Code
+.claude/
+
+# pytest
+.pytest_cache/
