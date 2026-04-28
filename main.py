@@ -47,7 +47,7 @@ logging.getLogger().addHandler(_file_handler)
 logger = logging.getLogger("main")
 
 # --- Import des modules du bot ---
-from data       import create_exchange, fetch_ohlcv, get_current_price, get_balance
+from data       import create_exchange, create_public_exchange, fetch_ohlcv, get_current_price, get_balance
 from indicators import add_indicators, get_latest
 from strategy   import check_signal, Signal
 from risk       import calculate_position, check_exit_conditions
@@ -218,8 +218,12 @@ def run():
     logger.info("=" * 60)
 
     # Initialisation
-    exchange = create_exchange()
-    state    = BotState()
+    # - exchange (testnet)        : pour les soldes et les ordres (auth)
+    # - data_exchange (public)    : pour OHLCV et prix courant (Binance Testnet
+    #   ne sert que ~166 bougies historiques, insuffisant pour calculer SMA200)
+    exchange      = create_exchange()
+    data_exchange = create_public_exchange()
+    state         = BotState()
 
     # Récupération du capital de départ (réel testnet)
     balances         = get_balance(exchange)
@@ -249,7 +253,7 @@ def run():
 
             try:
                 # ── 1. Données ─────────────────────────────────────────────
-                df = fetch_ohlcv(exchange)
+                df = fetch_ohlcv(data_exchange)
 
                 # ── 2. Indicateurs ─────────────────────────────────────────
                 df     = add_indicators(df)
@@ -258,7 +262,7 @@ def run():
 
                 # ── 3. Vérification stop-loss / take-profit ────────────────
                 if state.in_position:
-                    current_price = get_current_price(exchange)
+                    current_price = get_current_price(data_exchange)
                     exit_reason   = check_exit_conditions(
                         state.entry_price, current_price,
                         state.stop_loss, state.take_profit,
